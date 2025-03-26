@@ -1,0 +1,220 @@
+---
+title: "module6"
+author: "wilson F."
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r librairie}
+#install.packages("leaps")
+library(leaps)
+library(glmnet)
+library(ISLR2)
+library(dplyr)
+library(rsample)
+
+```
+
+### Question 1
+Nous effectuons la sélection du meilleur sous-ensemble, en avant et en arrière sur un seul ensemble de données. Pour chaque approche, nous obtenons des modèles p+1 contenant des prédicteurs 0,1 ...p
+
+Répondons aux questions 
+
+#### a
+Lequel des trois modèles avec des prédicteurs k a le plus petit RSS d’entraînement ?
+
+**Rép :** C'est le meilleur sous ensemble qui doit avoir le plus petit RSS d'entrainement. 
+ D'après sa définition, le meilleur sous ensemble est le meilleur modèle parmi toutes les possibilités. 
+ 
+#### b
+Lequel des trois modèles avec des prédicteurs k a le plus petit RSS test ?
+
+**Rép: ** Je pense que c'est la selection en arrière qui a le plus petit RSS test, car il prend toutes les variables et élimine progressivement celles qui ne sont pas neccessaires.Cette facon de faire permet de diminuer progressivement l'effet du sur ajustement jusqu'à satisfaction.
+
+#### c  Répondre par vrai ou faux
+i- Vrai
+
+ii- Vrai
+
+iii- Faux
+
+iv- Faux
+
+v- Faux
+
+
+### Question 2
+
+a -iii 
+
+Le LASSO est moins flexible que le moindre carré, car il force certain coefficient à être nulls.
+
+b - iii  Pour les même raisons que précédament
+
+### Question 3 
+
+
+a - iV
+
+lorsque s=0, on a le modele null = le plus rigide possible, le RSS de formation(ou d'entrainement est le plus grand possible. ). à mesure que s augmente, les beta_j ont tendance à 
+prendre n'importe quelle valeur possible, ce qui augmente la flexibilité du modèle.--> lee modèle tend à épouser les données d'entrainement  avec pour limite le modèle  des moindres carrés. donc le RSS d'entrainement tend à diminuer progressivement jusqu'à la limite du RSS des moindres carrés
+
+b- ambigü, il n'y a pas s ici
+ 
+c - idème 
+
+d- idème
+
+e - idème
+
+### Question 4
+
+a- iii
+
+si Lambda =0, le modele est égal au modèle de regression linéaire des moindre carrées.La presence de lambda 
+a pour effet de penaliser les coefficients et les rendre moin flexible. à mesure que lambda augmente, cette pénalité est considerable et le modèle devient plus rigide --> Le RSS de formation va donc augmenter continuellement, partant de la valeur du RSS du modèle linéaire des moindres carrées avec toutes les variable, jusqu'à celle du modèle vide.
+
+b- ambigu
+
+c- ideme
+
+d- ideme
+
+e- ideme
+
+
+
+
+## Pratique
+
+### Pratique : Exercice 1  
+
+
+
+```{r generation-predicteur}
+set.seed(2025)
+#a
+X <- rnorm(100, mean = 0, sd = 1)
+epsilon <- rnorm(100, mean = 0, sd = 1)
+
+#b-  vecteur reponse
+
+beta_0 <- 4  
+beta_1 <- 5
+beta_2 = -3
+beta_3 = 2
+
+Y <- beta_0 + beta_1 * X + beta_2*X^2 +  beta_3*X^3 + epsilon
+
+```
+
+```{r meilleur-sous-ensemble}
+#c
+
+data <- data.frame(Y, X)
+for (i in 4:10) {
+  data[[paste0("X", i)]] <- X^i
+}
+
+regfit.full <- regsubsets(Y ~ ., data = data, nvmax = 10)
+reg.summary <- summary(regfit.full)
+
+# Quel est le meilleur modèle obtenu selon R^2 ajusté, Cp, et BIC
+
+
+meilleur_adj_r2 = which.max(reg.summary$adjr2)
+
+cat("\n meilleur modelle selon r2 ajusté : celui avec " , meilleur_adj_r2 , "variables")
+
+meilleur_cp <- which.min(reg.summary$cp)
+
+cat("\n meilleur modele selon Cp :  celui avec " , meilleur_cp , "variables" )
+meilleur_bic <- which.min(reg.summary$bic)
+
+cat("\n meilleur modele selon BIC : celui avec " , meilleur_bic, "variables " )
+
+
+#Representations graphiques
+
+par(mfrow = c(2, 2))
+plot(reg.summary$rss, xlab = "Nombre de Variables", ylab = "RSS", type = "l")
+plot(reg.summary$adjr2, xlab = "Nombre de Variables", ylab = "R^2 Ajusté", type = "l")
+plot(reg.summary$cp, xlab = "Nombre de Variables", ylab = "Cp", type = "l")
+plot(reg.summary$bic, xlab = "Nombre de Variables", ylab = "BIC", type = "l")
+
+```
+```{r modele-lineaire-college}
+data("College")
+head(College)
+set.seed(2025)
+split <- initial_split(College, prop = 0.8)
+train_data <- training(split)
+test_data <- testing(split)
+
+# Question b modele lineaire
+
+lm_model <- lm(Outstate ~ ., data = train_data)
+summary(lm_model)
+predictions <- predict(lm_model, newdata = test_data)
+erreur <- sqrt(mean((test_data$Outstate - predictions)^2))
+cat("RMSE de test = ", erreur)
+
+```
+### c
+
+```{r modele-ridge}
+
+x_train <- model.matrix(Outstate ~ ., train_data)[, -1]  
+y_train <- train_data$Outstate
+
+set.seed(2025)
+cv_ridge <- cv.glmnet(x_train, y_train, alpha = 0, nfolds = 10)  # alpha=0 pour Ridge
+print(cv_ridge)
+plot(cv_ridge)
+meilleur_lambda <- cv_ridge$lambda.min
+cat("Meilleur lambda choisi par validation croisée : ", meilleur_lambda, "\n")
+
+ridge_model <- glmnet(x_train, y_train, alpha = 0, lambda = meilleur_lambda)
+
+x_test <- model.matrix(Outstate ~ ., test_data)[, -1] 
+y_test <- test_data$Outstate
+
+
+predictions <- predict(ridge_model, s = meilleur_lambda, newx = x_test)
+
+erreur_ridge <- sqrt(mean((y_test - predictions)^2))
+cat("Erreur de test (RMSE): ", erreur_ridge, "\n")
+
+```
+
+
+
+### d
+
+```{r modele-lasso}
+set.seed(2025)
+cv.lasso <- cv.glmnet(x_train, y_train, alpha = 1)
+plot(cv.lasso)
+
+meilleur_lambda <- cv.lasso$lambda.min
+print(paste("Meilleur lambda (lasso) :", meilleur_lambda))
+
+
+
+predictions_lasso <- predict(cv.lasso, s = meilleur_lambda, newx = x_test)
+mse_lasso <- mean((predictions_lasso - y_test)^2)
+print(paste("Erreur quadratique moyenne (MSE) sur le test :", round(mse_lasso, 2)))
+
+
+coeff_lasso <- predict(cv.lasso, type = "coefficients", s = meilleur_lambda)
+non_zero <- sum(coeff_lasso != 0) - 1 
+print(paste("Nombre de coefficients non nuls :", non_zero))
+
+
+```
+
+
+
+
+
+
